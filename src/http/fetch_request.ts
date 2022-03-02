@@ -1,17 +1,29 @@
-import { FetchResponse } from "./fetch_response"
-import { FrameElement } from "../elements/frame_element"
-import { dispatch } from "../util"
+import { FetchResponse } from "./fetch_response";
+import { FrameElement } from "../elements/frame_element";
+import { dispatch } from "../util";
 
 export interface FetchRequestDelegate {
-  referrer?: URL
+  referrer?: URL;
 
-  prepareHeadersForRequest?(headers: FetchRequestHeaders, request: FetchRequest): void
-  requestStarted(request: FetchRequest): void
-  requestPreventedHandlingResponse(request: FetchRequest, response: FetchResponse): void
-  requestSucceededWithResponse(request: FetchRequest, response: FetchResponse): void
-  requestFailedWithResponse(request: FetchRequest, response: FetchResponse): void
-  requestErrored(request: FetchRequest, error: Error): void
-  requestFinished(request: FetchRequest): void
+  prepareHeadersForRequest?(
+    headers: FetchRequestHeaders,
+    request: FetchRequest
+  ): void;
+  requestStarted(request: FetchRequest): void;
+  requestPreventedHandlingResponse(
+    request: FetchRequest,
+    response: FetchResponse
+  ): void;
+  requestSucceededWithResponse(
+    request: FetchRequest,
+    response: FetchResponse
+  ): void;
+  requestFailedWithResponse(
+    request: FetchRequest,
+    response: FetchResponse
+  ): void;
+  requestErrored(request: FetchRequest, error: Error): void;
+  requestFinished(request: FetchRequest): void;
 }
 
 export enum FetchMethod {
@@ -19,132 +31,149 @@ export enum FetchMethod {
   post,
   put,
   patch,
-  delete
+  delete,
 }
 
 export function fetchMethodFromString(method: string) {
   switch (method.toLowerCase()) {
-    case "get":    return FetchMethod.get
-    case "post":   return FetchMethod.post
-    case "put":    return FetchMethod.put
-    case "patch":  return FetchMethod.patch
-    case "delete": return FetchMethod.delete
+    case "get":
+      return FetchMethod.get;
+    case "post":
+      return FetchMethod.post;
+    case "put":
+      return FetchMethod.put;
+    case "patch":
+      return FetchMethod.patch;
+    case "delete":
+      return FetchMethod.delete;
   }
 }
 
-export type FetchRequestBody = FormData | URLSearchParams
+export type FetchRequestBody = FormData | URLSearchParams;
 
-export type FetchRequestHeaders = { [header: string]: string }
+export type FetchRequestHeaders = { [header: string]: string };
 
 export interface FetchRequestOptions {
-  headers: FetchRequestHeaders
-  body: FetchRequestBody
-  followRedirects: boolean
+  headers: FetchRequestHeaders;
+  body: FetchRequestBody;
+  followRedirects: boolean;
 }
 
 export class FetchRequest {
-  readonly delegate: FetchRequestDelegate
-  readonly method: FetchMethod
-  readonly headers: FetchRequestHeaders
-  readonly url: URL
-  readonly body?: FetchRequestBody
-  readonly target?: FrameElement | HTMLFormElement | null
-  readonly abortController = new AbortController
-  private resolveRequestPromise = (value: any) => {}
+  readonly delegate: FetchRequestDelegate;
+  readonly method: FetchMethod;
+  readonly headers: FetchRequestHeaders;
+  readonly url: URL;
+  readonly body?: FetchRequestBody;
+  readonly target?: FrameElement | HTMLFormElement | null;
+  readonly abortController = new AbortController();
+  private resolveRequestPromise = (value: any) => {};
 
-  constructor(delegate: FetchRequestDelegate, method: FetchMethod, location: URL, body: FetchRequestBody = new URLSearchParams, target: FrameElement | HTMLFormElement | null = null) {
-    this.delegate = delegate
-    this.method = method
-    this.headers = this.defaultHeaders
-    this.body = body
-    this.url = location
-    this.target = target
+  constructor(
+    delegate: FetchRequestDelegate,
+    method: FetchMethod,
+    location: URL,
+    body: FetchRequestBody = new URLSearchParams(),
+    target: FrameElement | HTMLFormElement | null = null
+  ) {
+    this.delegate = delegate;
+    this.method = method;
+    this.headers = this.defaultHeaders;
+    this.body = body;
+    this.url = location;
+    this.target = target;
   }
 
   get location(): URL {
-    return this.url
+    return this.url;
   }
 
   get params(): URLSearchParams {
-    return this.url.searchParams
+    return this.url.searchParams;
   }
 
   get entries() {
-    return this.body ? Array.from(this.body.entries()) : []
+    return this.body ? Array.from(this.body.entries()) : [];
   }
 
   cancel() {
-    this.abortController.abort()
+    this.abortController.abort();
   }
 
   async perform(): Promise<FetchResponse | void> {
-    const { fetchOptions } = this
-    this.delegate.prepareHeadersForRequest?.(this.headers, this)
-    await this.allowRequestToBeIntercepted(fetchOptions)
+    const { fetchOptions } = this;
+    this.delegate.prepareHeadersForRequest?.(this.headers, this);
+    await this.allowRequestToBeIntercepted(fetchOptions);
     try {
-      this.delegate.requestStarted(this)
-      const response = await fetch(this.url.href, fetchOptions)
-      return await this.receive(response)
+      this.delegate.requestStarted(this);
+      const response = await fetch(this.url.href, fetchOptions);
+      return await this.receive(response);
     } catch (error) {
-      if (error.name !== 'AbortError') {
-        this.delegate.requestErrored(this, error)
-        throw error
+      if (error.name !== "AbortError") {
+        this.delegate.requestErrored(this, error);
+        throw error;
       }
     } finally {
-      this.delegate.requestFinished(this)
+      this.delegate.requestFinished(this);
     }
   }
 
   async receive(response: Response): Promise<FetchResponse> {
-    const fetchResponse = new FetchResponse(response)
-    const event = dispatch("turbo:before-fetch-response", { cancelable: true, detail: { fetchResponse }, target: this.target as EventTarget })
+    const fetchResponse = new FetchResponse(response);
+    const event = dispatch("turbo:before-fetch-response", {
+      cancelable: true,
+      detail: { fetchResponse },
+      target: this.target as EventTarget,
+    });
     if (event.defaultPrevented) {
-      this.delegate.requestPreventedHandlingResponse(this, fetchResponse)
+      this.delegate.requestPreventedHandlingResponse(this, fetchResponse);
     } else if (fetchResponse.succeeded) {
-      this.delegate.requestSucceededWithResponse(this, fetchResponse)
+      this.delegate.requestSucceededWithResponse(this, fetchResponse);
     } else {
-      this.delegate.requestFailedWithResponse(this, fetchResponse)
+      this.delegate.requestFailedWithResponse(this, fetchResponse);
     }
-    return fetchResponse
+    return fetchResponse;
   }
 
   get fetchOptions(): RequestInit {
     return {
       method: FetchMethod[this.method].toUpperCase(),
-      credentials: "same-origin",
+      credentials: "include",
       headers: this.headers,
       redirect: "follow",
       body: this.isIdempotent ? null : this.body,
       signal: this.abortSignal,
-      referrer: this.delegate.referrer?.href
-    }
+      referrer: this.delegate.referrer?.href,
+    };
   }
 
   get defaultHeaders() {
     return {
-      "Accept": "text/html, application/xhtml+xml"
-    }
+      Accept: "text/html, application/xhtml+xml",
+    };
   }
 
   get isIdempotent() {
-    return this.method == FetchMethod.get
+    return this.method == FetchMethod.get;
   }
 
   get abortSignal() {
-    return this.abortController.signal
+    return this.abortController.signal;
   }
 
   private async allowRequestToBeIntercepted(fetchOptions: RequestInit) {
-    const requestInterception = new Promise(resolve => this.resolveRequestPromise = resolve)
+    const requestInterception = new Promise(
+      (resolve) => (this.resolveRequestPromise = resolve)
+    );
     const event = dispatch("turbo:before-fetch-request", {
       cancelable: true,
       detail: {
         fetchOptions,
         url: this.url,
-        resume: this.resolveRequestPromise
+        resume: this.resolveRequestPromise,
       },
-      target: this.target as EventTarget
-    })
-    if (event.defaultPrevented) await requestInterception
+      target: this.target as EventTarget,
+    });
+    if (event.defaultPrevented) await requestInterception;
   }
 }
